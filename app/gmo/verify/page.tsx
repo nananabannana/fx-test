@@ -9,7 +9,10 @@ import {
   CartesianGrid, ComposedChart, Line, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis, ZAxis,
 } from "recharts";
 import { useGmoRecords } from "@/lib/useGmoRecords";
-import { brier, calibration, summarize, type Engine } from "@/lib/gmoOption";
+import { brier, calibration, EXPIRY_HOURS_JST, outcomeOf, summarize, type Engine, type Outcome, type TradeRecord } from "@/lib/gmoOption";
+import { jstHour, type Result } from "@/lib/conditions";
+import { useFxEvents } from "@/lib/useFxEvents";
+import { ConditionAnalysis, type CondItem } from "@/components/ConditionAnalysis";
 import { Card, Kpi, Notice } from "@/components/stocks/ui";
 
 const ENGINE_LABEL: Record<Engine, string> = { baseline: "基準モデル", indicator: "指標", claude: "Claude" };
@@ -19,6 +22,10 @@ const yen = (v: number | null) =>
 
 type EngineFilter = Engine | "all";
 type ExecFilter = "all" | "executed" | "paper";
+type ExpiryFilter = "all" | `${number}`;
+
+const RESULT: Record<Outcome, Result> = { win: "win", lose: "lose", draw: "excluded", pending: "pending" };
+const expiryHourOf = (r: TradeRecord) => Math.round(jstHour(r.expiry)) % 24;
 
 export default function GmoVerifyPage() {
   const isClient = useIsClient();
@@ -27,9 +34,17 @@ export default function GmoVerifyPage() {
 }
 
 function VerifyView() {
-  const { records } = useGmoRecords();
+  const { records: allRecords, update } = useGmoRecords();
+  const events = useFxEvents();
   const [engine, setEngine] = useState<EngineFilter>("all");
   const [exec, setExec] = useState<ExecFilter>("all");
+  const [expiry, setExpiry] = useState<ExpiryFilter>("all");
+  const usedHours = EXPIRY_HOURS_JST.filter((h) => allRecords.some((r) => expiryHourOf(r) === h));
+  // 判定時刻（回号の満期の時）で絞り込む。ページ全体に効かせる
+  const records = useMemo(
+    () => (expiry === "all" ? allRecords : allRecords.filter((r) => String(expiryHourOf(r)) === expiry)),
+    [allRecords, expiry],
+  );
   const [calEngine, setCalEngine] = useState<Engine>("baseline");
 
   const filtered = useMemo(
@@ -49,6 +64,9 @@ function VerifyView() {
   const calBase = records.filter((r) => exec === "all" || (exec === "executed" ? r.executed : !r.executed));
   const bins = calibration(calBase, calEngine);
   const scores = (["baseline", "indicator", "claude"] as Engine[]).map((e) => ({ engine: e, b: brier(calBase, e) }));
+  const condItems: CondItem[] = filtered.map((r) => ({ id: r.id, time: r.createdAt, session: r.session, atrPips: r.atrPips, result: RESULT[outcomeOf(r)] }));
+  const atrPopulation = allRecords.flatMap((r) => (r.atrPips === undefined ? [] : [r.atrPips]));
+  const backfill = allRecords.filter((r) => r.atrPips === undefined && !r.atrUnavailable).map((r) => ({ id: r.id, asOf: r.createdAt }));
   const points = bins.filter((b) => b.n > 0).map((b) => ({ x: b.avgPred!, y: b.hitRate!, n: b.n, label: b.label }));
 
   return (
@@ -67,6 +85,12 @@ function VerifyView() {
             options={[["all", "すべて"], ["baseline", "基準モデル"], ["indicator", "指標"], ["claude", "Claude"]]}
           />
           <Filter label="購入" value={exec} onChange={setExec} options={[["all", "すべて"], ["executed", "実購入"], ["paper", "記録のみ"]]} />
+          <Filter
+            label="判定時刻"
+            value={expiry}
+            onChange={setExpiry}
+            options={[["all", "すべて"], ...usedHours.map((h) => [`${h}`, `${h}時`] as [ExpiryFilter, string])]}
+          />
         </div>
       </Card>
 
@@ -124,6 +148,20 @@ function VerifyView() {
           </table>
         </div>
       </Card>
+
+      <ConditionAnalysis
+        items={condItems}
+        atrPopulation={atrPopulation}
+        events={events}
+        backfill={backfill}
+        onPatch={update}
+        note={
+          <>
+            上の「判断に使ったエンジン」「購入」「判定時刻」の絞り込みに連動します。引き分けは対象外です。
+            外為オプションの払戻倍率は 1,000円 ÷ 購入価格{s.avgBreakeven ? `（いまの記録の平均損益分岐 ${pct(s.avgBreakeven)} ＝ 約${(1 / s.avgBreakeven).toFixed(2)}倍）` : ""}です。
+          </>
+        }
+      />
 
       <Card
         title="確率の較正（予測した確率 vs 実際に上だった割合）"

@@ -8,9 +8,17 @@ import { FLAT_THRESHOLD_PIPS, HORIZON_OPTIONS, PAIR } from "@/lib/config";
 import { HistoryList } from "@/components/HistoryList";
 import { ChangeChart } from "@/components/ChangeChart";
 import { SourceBadge } from "@/components/SourceBadge";
+import { ConditionAnalysis, type CondItem } from "@/components/ConditionAnalysis";
+import { useFxEvents } from "@/lib/useFxEvents";
+import type { Result } from "@/lib/conditions";
+import type { Outcome } from "@/lib/types";
+
+const MINUTE = 60_000;
+const RESULT: Record<Outcome, Result> = { match: "win", miss: "lose", excluded: "excluded", pending: "pending", unavailable: "pending" };
 
 export default function VerifyPage() {
-  const { history: everything, mode } = usePredictions();
+  const { history: everything, mode, patchPrediction } = usePredictions();
+  const events = useFxEvents();
   const isLive = mode === "live";
   const [filter, setFilter] = useState<"all" | "claude" | "demo">("all");
   const [hFilter, setHFilter] = useState<number | "all">("all");
@@ -23,6 +31,13 @@ export default function VerifyPage() {
     engine: e,
     ...summarize(all.filter((h) => (h.engine ?? "demo") === e)),
   }));
+
+  const condItems: CondItem[] = history.map((h) => ({ id: h.id, time: h.at, session: h.session, atrPips: h.atrPips, result: RESULT[h.outcome] }));
+  const atrPopulation = everything.flatMap((h) => (h.atrPips === undefined ? [] : [h.atrPips]));
+  // 実データだけ、Twelve Data の過去の足から補完できる（サンプルは手元に全履歴があるので自動で済む）
+  const backfill = isLive
+    ? everything.filter((h) => h.atrPips === undefined && !h.atrUnavailable).map((h) => ({ id: h.id, asOf: h.at + MINUTE }))
+    : null;
 
   const stats = [
     { label: "予測の総数", value: s.total },
@@ -131,6 +146,15 @@ export default function VerifyPage() {
           </p>
         )}
       </section>
+
+      <ConditionAnalysis
+        items={condItems}
+        atrPopulation={atrPopulation}
+        events={events}
+        backfill={backfill}
+        onPatch={patchPrediction}
+        note="上の「期間」「エンジン」の絞り込みに連動します。判断保留の予測は対象外です。"
+      />
 
       <section className="rounded-2xl border border-line bg-panel p-3 sm:p-4">
         <h2 className="mb-2 px-1 text-sm font-semibold">

@@ -24,6 +24,7 @@ import { findActualPrice, verifyPrediction } from "./verify";
 import { useLiveCandles, type LiveStatus } from "./useLiveCandles";
 import type { AnalyzeResponse, Engine } from "./analysisTypes";
 import { usePathname } from "next/navigation";
+import { atr5m, conditionsAt, sessionOf, type ConditionFields } from "./conditions";
 
 const DEMO_KEY = "fx-signal-lab:demo:v2";
 const LIVE_KEY = "fx-signal-lab:live:v1";
@@ -33,6 +34,7 @@ const HORIZON_KEY = "fx-signal-lab:horizon";
 const INITIAL_CURSOR = 120;
 /** デモで「AI分析を実行」1回ごとに進めるサンプル時間（分） */
 const STEP_MINUTES = 6;
+const MINUTE = 60_000;
 /** 実データの履歴として保存する最大件数 */
 const LIVE_HISTORY_MAX = 200;
 
@@ -77,8 +79,11 @@ function makePrediction(
   engine: Engine = "demo",
   model?: string,
   horizonMinutes: number = HORIZON_MINUTES,
+  /** 予測時点までの足（条件の記録用） */
+  history: Candle[] = [],
 ): Prediction {
   return {
+    ...conditionsAt(history, candle.time + MINUTE, candle.time),
     id: `${source}-${engine}-${horizonMinutes}-${candle.time}`,
     engine,
     ...(model ? { model } : {}),
@@ -95,9 +100,30 @@ function makePrediction(
 function initialDemoHistory(): Prediction[] {
   const list: Prediction[] = [];
   for (let i = INITIAL_CURSOR - STEP_MINUTES * 8; i < INITIAL_CURSOR; i += STEP_MINUTES) {
-    list.unshift(makePrediction(sampleCandles[i], "demo", analyzeDemo(demoInput(i))));
+    list.unshift(makePrediction(sampleCandles[i], "demo", analyzeDemo(demoInput(i)), "demo", undefined, HORIZON_MINUTES, sampleCandles.slice(0, i + 1)));
   }
   return list;
+}
+
+/**
+ * 条件（セッション・ATR）が欠けている古い記録を、手元の足から補完する。
+ * final=true（サンプルのように全履歴が手元にある）なら、計算できないものは「不明」で確定させる。
+ */
+function fillConditions(list: Prediction[], candles: Candle[], final: boolean): Prediction[] {
+  let changed = false;
+  const next = list.map((p) => {
+    const patch: ConditionFields = {};
+    if (!p.session) patch.session = sessionOf(p.at);
+    if (p.atrPips === undefined && !p.atrUnavailable) {
+      const atr = atr5m(candles, p.at + MINUTE);
+      if (atr !== null) patch.atrPips = atr;
+      else if (final) patch.atrUnavailable = true;
+    }
+    if (Object.keys(patch).length === 0) return p;
+    changed = true;
+    return { ...p, ...patch };
+  });
+  return changed ? next : list;
 }
 
 function load<T>(key: string): T | null {
@@ -142,6 +168,7 @@ type Store = {
   advance: () => void;
   canAdvance: boolean;
   reset: () => void;
+  patchPrediction: (id: string, patch: ConditionFields) => void;
   /** 実データ専用 */
   live: { status: LiveStatus; stale: boolean; refresh: () => Promise<void>; lastTime: number | null };
 };
@@ -181,12 +208,12 @@ export function PredictionProvider({ children }: { children: ReactNode }) {
     const d = load<{ cursor: number; predictions: Prediction[]; latestId: string | null }>(DEMO_KEY);
     if (d && typeof d.cursor === "number" && Array.isArray(d.predictions)) {
       setCursor(d.cursor);
-      setDemoPredictions(d.predictions);
+      setDemoPredictions(fillConditions(d.predictions, sampleCandles, true));
       setDemoLatestId(d.latestId ?? null);
     }
     const l = load<{ predictions: Prediction[]; latestId: string | null }>(LIVE_KEY);
     if (l && Array.isArray(l.predictions)) {
-      setLivePredictions(l.predictions);
+      setLivePredictions(fillConditions(l.predictions, [], false));
       setLiveLatestId(l.latestId ?? null);
     }
     setLoaded(true);
@@ -214,7 +241,8 @@ export function PredictionProvider({ children }: { children: ReactNode }) {
         changed = true;
         return { ...p, resolvedPrice: price };
       });
-      return changed ? next : prev;
+      // ATR が欠けた記録も、手元の足（直近約2.5時間）で計算できれば補完する
+      return fillConditions(changed ? next : prev, live.candles, false);
     });
   }, [live.candles]);
 
@@ -279,7 +307,7 @@ export function PredictionProvider({ children }: { children: ReactNode }) {
           result = await demoAnalyzer({ pair: PAIR, horizonMinutes: horizon, candles });
         }
 
-        const p = makePrediction(target, mode, result, useEngine, model, horizon);
+        const p = makePrediction(target, mode, result, useEngine, model, horizon, candles);
         if (mode === "demo") {
           setCursor(demoNext);
           setDemoPredictions((prev) => [p, ...prev.filter((x) => x.id !== p.id)]);
@@ -311,6 +339,16 @@ export function PredictionProvider({ children }: { children: ReactNode }) {
     if (analyzing || mode !== "demo") return;
     setCursor((c) => Math.min(c + advanceStep, sampleCandles.length - 1));
   }, [analyzing, mode, advanceStep]);
+
+  /** いま選んでいるデータの記録に、条件の補完結果を書き込む */
+  const patchPrediction = useCallback(
+    (id: string, patch: ConditionFields) => {
+      const apply = (l: Prediction[]) => l.map((p) => (p.id === id ? { ...p, ...patch } : p));
+      if (mode === "demo") setDemoPredictions(apply);
+      else setLivePredictions(apply);
+    },
+    [mode],
+  );
 
   const reset = useCallback(() => {
     setAnalysisError(null);
@@ -358,6 +396,7 @@ export function PredictionProvider({ children }: { children: ReactNode }) {
       advance,
       canAdvance,
       reset,
+      patchPrediction,
       live: {
         status: live.status,
         stale: live.stale,
@@ -368,7 +407,7 @@ export function PredictionProvider({ children }: { children: ReactNode }) {
   }, [
     mode, setMode, engine, setEngine, horizon, setHorizon, analysisError, runDemoInstead, cursor, demoPredictions, demoLatestId, livePredictions, liveLatestId,
     live.candles, live.status, live.stale, live.refresh, liveLast,
-    analyzing, canAnalyze, blockedReason, runAnalysis, advance, canAdvance, reset,
+    analyzing, canAnalyze, blockedReason, runAnalysis, advance, canAdvance, reset, patchPrediction,
   ]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

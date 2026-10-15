@@ -1,5 +1,7 @@
 // アプリ全体で使う型定義
 
+import type { ConditionFields } from "./conditions";
+
 /** ローソク足1本分のデータ（1分足） */
 export type Candle = {
   /** 足の開始時刻（UNIXミリ秒） */
@@ -38,7 +40,7 @@ export type Prediction = {
   model?: string;
   /** 予測期間後の実績が確定したら保存する（実データでは古い足が取得範囲から外れるため） */
   resolvedPrice?: number;
-};
+} & ConditionFields;
 
 /** 予測と実績の照合結果 */
 export type Outcome = "match" | "miss" | "excluded" | "pending" | "unavailable";

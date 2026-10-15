@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Candle } from "./types";
 import { expiryRate, outcomeOf, pnlOf, PAYOUT, type TradeRecord } from "./gmoOption";
+import { atr5m, SESSION_LABEL, sessionOf, type ConditionFields } from "./conditions";
 
 const KEY = "fx-signal-lab:gmo:v1";
 const MIN = 60_000;
@@ -20,8 +21,31 @@ function load(): TradeRecord[] {
 }
 
 /** ブラウザでだけ描く画面（useIsClient で守った画面）から使うこと */
+/** 条件（セッション・ATR）が欠けている記録を、手元の足で計算できれば補完する */
+function fillConditions(list: TradeRecord[], candles: Candle[]): TradeRecord[] {
+  let changed = false;
+  const next = list.map((r) => {
+    const patch: ConditionFields = {};
+    if (!r.session) patch.session = sessionOf(r.createdAt);
+    if (r.atrPips === undefined && !r.atrUnavailable && candles.length) {
+      const atr = atr5m(candles, r.createdAt);
+      if (atr !== null) patch.atrPips = atr;
+    }
+    if (Object.keys(patch).length === 0) return r;
+    changed = true;
+    return { ...r, ...patch };
+  });
+  return changed ? next : list;
+}
+
 export function useGmoRecords(liveCandles: Candle[] = []) {
-  const [records, setRecords] = useState<TradeRecord[]>(load);
+  const [records, setRecords] = useState<TradeRecord[]>(() => fillConditions(load(), []));
+
+  useEffect(() => {
+    if (liveCandles.length === 0) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 外部から届いた足で、欠けている条件を補完する
+    setRecords((l) => fillConditions(l, liveCandles));
+  }, [liveCandles]);
   const loaded = true;
   const busy = useRef(false);
 
@@ -81,7 +105,7 @@ export function recordsToCsv(records: TradeRecord[]): string {
   const p = (v: number | undefined) => (v === undefined ? "" : (v * 100).toFixed(1));
   const head = [
     "記録日時", "回号", "満期", "方向", "目標レート", "記録時の現在値", "満期まで(分)", "購入価格", "枚数", "損益分岐(%)",
-    "判断エンジン", "基準モデル(%)", "指標(%)", "Claude(%)", "安全幅(%)", "実購入", "判定レート(自動)", "判定レート(手入力)", "結果", "損益(円)", "メモ",
+    "判断エンジン", "基準モデル(%)", "指標(%)", "Claude(%)", "安全幅(%)", "実購入", "判定レート(自動)", "判定レート(手入力)", "結果", "損益(円)", "セッション", "ATR5分(pips)", "メモ",
   ];
   const outcome = { win: "勝ち", lose: "負け", draw: "引き分け", pending: "判定待ち" } as const;
   const rows = records.map((r) =>
@@ -90,6 +114,7 @@ export function recordsToCsv(records: TradeRecord[]): string {
       Math.round(r.minutesLeft), r.price, r.units, ((r.price / PAYOUT) * 100).toFixed(1), r.engine,
       p(r.probs.baseline), p(r.probs.indicator), p(r.probs.claude), (r.margin * 100).toFixed(1), r.executed ? "はい" : "いいえ",
       r.expiryRateAuto?.toFixed(3) ?? "", r.expiryRateManual?.toFixed(3) ?? "", outcome[outcomeOf(r)], pnlOf(r) ?? "",
+      r.session ? SESSION_LABEL[r.session] : "", r.atrPips?.toFixed(2) ?? "",
       r.note.replace(/[\r\n,]/g, " "),
     ].join(","),
   );
