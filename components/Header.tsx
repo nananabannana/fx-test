@@ -7,6 +7,7 @@ import { DemoBadge } from "./DemoBadge";
 const NAV = [
   { href: "/gmo", label: "外為OP", match: (p: string) => p === "/gmo" },
   { href: "/gmo/verify", label: "OP検証", match: (p: string) => p.startsWith("/gmo/verify") },
+  { href: "/predict", label: "短期予測", match: (p: string) => p.startsWith("/predict") },
   { href: "/stocks", label: "株スイング", match: (p: string) => p.startsWith("/stocks") },
   { href: "/legacy", label: "旧モード", match: (p: string) => p.startsWith("/legacy") || p.startsWith("/binary") },
 ];
@@ -15,7 +16,7 @@ export function Header() {
   const pathname = usePathname();
   return (
     <header className="sticky top-0 z-20 border-b border-line bg-bg/90 backdrop-blur">
-      <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
+      <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-2 px-3 sm:gap-3 sm:px-6">
         <Link href="/gmo" className="flex shrink-0 items-center gap-2" aria-label="FX Signal Lab">
           <Logo />
           <span className="hidden whitespace-nowrap text-[15px] font-bold tracking-tight min-[480px]:inline">FX Signal Lab</span>
@@ -31,7 +32,7 @@ export function Header() {
                 key={n.href}
                 href={n.href}
                 aria-current={active ? "page" : undefined}
-                className={`whitespace-nowrap rounded-md px-2.5 py-1.5 transition-colors sm:px-3 ${
+                className={`whitespace-nowrap rounded-md px-1.5 py-1.5 transition-colors min-[400px]:px-2.5 sm:px-3 ${
                   active ? "bg-panel-2 font-semibold text-ink" : "text-muted hover:text-ink"
                 }`}
               >

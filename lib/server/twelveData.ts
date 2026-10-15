@@ -70,6 +70,8 @@ export async function fetchCandles(opts: {
     if (code === 429) {
       throw new LiveDataError("rate_limit", "無料枠の利用上限に達しました。しばらく待ってから再取得してください。");
     }
+    // 期間指定で、その期間に足がない（週末など）
+    if (opts.range && "message" in body && /no data/i.test(body.message)) return [];
     throw new LiveDataError("upstream", "為替データAPIがエラーを返しました。");
   }
 
