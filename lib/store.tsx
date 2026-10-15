@@ -164,14 +164,15 @@ export function PredictionProvider({ children }: { children: ReactNode }) {
   // 実データの状態
   const [livePredictions, setLivePredictions] = useState<Prediction[]>([]);
   const [liveLatestId, setLiveLatestId] = useState<string | null>(null);
-  // 実データの自動更新は FX の画面を開いているときだけ（株スイングの画面では取得しない）
+  // 実データの自動更新は旧モード（◯分後予測）の画面を開いているときだけ
   const pathname = usePathname();
-  const onFxPage = pathname === "/" || pathname.startsWith("/verify");
+  const onFxPage = pathname.startsWith("/legacy");
   const live = useLiveCandles(loaded && mode === "live" && onFxPage);
 
   // 保存済みの状態を読み込む
   useEffect(() => {
     const m = load<DataSource>(MODE_KEY);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage はブラウザでしか読めないため、表示後に復元する
     if (m === "demo" || m === "live") setModeState(m);
     const e = load<Engine>(ENGINE_KEY);
     if (e === "demo" || e === "claude") setEngineState(e);
@@ -203,6 +204,7 @@ export function PredictionProvider({ children }: { children: ReactNode }) {
   // 実データ：予測期間後の足が届いたら、実績価格を予測に書き込んで確定させる
   useEffect(() => {
     if (live.candles.length === 0) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 外部から届いた足に合わせて記録を確定させる
     setLivePredictions((prev) => {
       let changed = false;
       const next = prev.map((p) => {

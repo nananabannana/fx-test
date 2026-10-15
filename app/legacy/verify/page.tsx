@@ -162,7 +162,7 @@ export default function VerifyPage() {
           </li>
           {isLive && <li>アプリを閉じていて期間後の足を取得できず、取得範囲（約2.5時間）から外れた予測は「取得できず」になります。</li>}
         </ul>
-        <Link href="/" className="mt-3 inline-block font-semibold text-accent underline-offset-4 hover:underline">
+        <Link href="/legacy" className="mt-3 inline-block font-semibold text-accent underline-offset-4 hover:underline">
           ← 分析画面に戻る
         </Link>
       </section>

@@ -25,6 +25,8 @@ export default function StockAnalysisPage() {
   const [scoreError, setScoreError] = useState<string | null>(null);
   const [draft, setDraft] = useState<RecordDraft | null>(null);
 
+  // 最近見た銘柄はブラウザでしか読めないため、表示後に読み込む
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- 上のとおり
   useEffect(() => setRecent(loadRecent()), []);
 
   const load = useCallback(async (raw: string, force = false) => {

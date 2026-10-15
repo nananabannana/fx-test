@@ -29,9 +29,15 @@ export default function BacktestPage() {
   const [runs, setRuns] = useState<BacktestRunSummary[]>([]);
   const cancel = useRef(false);
 
+  const loadRuns = () =>
+    apiGet<Extract<BacktestListResponse, { ok: true }>>("/api/stocks/backtest")
+      .then((r) => setRuns(r.runs))
+      .catch(() => setRuns([]));
+
   useEffect(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(FORM_KEY) ?? "null");
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 保存した入力はブラウザでしか読めないため、表示後に復元する
       if (saved?.codesText) setCodesText(saved.codesText);
       if (saved?.p) setP({ ...DEFAULT_PARAMS, ...saved.p });
     } catch {
@@ -47,11 +53,6 @@ export default function BacktestPage() {
       /* 無視 */
     }
   }, [codesText, p]);
-
-  const loadRuns = () =>
-    apiGet<Extract<BacktestListResponse, { ok: true }>>("/api/stocks/backtest")
-      .then((r) => setRuns(r.runs))
-      .catch(() => setRuns([]));
 
   const codes = [...new Set(codesText.toUpperCase().split(/[\s,、]+/).filter((c) => /^[0-9A-Z]{4}$/.test(c)))];
   const busy = step !== "idle";

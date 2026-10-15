@@ -35,6 +35,7 @@ export default function PaperLogPage() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 表示したらサーバーから一覧を読み込む
     load();
   }, [load]);
 
