@@ -14,6 +14,7 @@ import {
   type Direction, type Engine, type OpenRound, type TradeRecord,
 } from "@/lib/gmoOption";
 import { PIP } from "@/lib/config";
+import { conditionsAt } from "@/lib/conditions";
 import { Button, Card, ErrorBox, Field, inputClass, Notice, Spinner } from "@/components/stocks/ui";
 
 const MIN = 60_000;
@@ -121,9 +122,11 @@ function GmoView() {
 
   const record = () => {
     if (!canRecord || !round || spot === null) return;
+    const createdAt = nowMs();
     const r: TradeRecord = {
-      id: `gmo-${nowMs().toString(36)}`,
-      createdAt: nowMs(),
+      ...conditionsAt(live.candles, createdAt),
+      id: `gmo-${createdAt.toString(36)}`,
+      createdAt,
       roundId: round.id,
       expiry: round.expiry,
       strike: Math.round(strike * 1000) / 1000,

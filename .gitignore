@@ -11,3 +11,6 @@ next-env.d.ts
 
 # 株スイングのローカル保存（Supabase 未接続時）
 .data
+
+# next dev が自動で作るファイル
+AGENTS.md

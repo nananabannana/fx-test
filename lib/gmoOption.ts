@@ -12,6 +12,8 @@
 // 時刻はすべて「UTC ミリ秒 + 9時間」で JST を計算する（実行環境のタイムゾーンに依存しない）。
 // 祝日・年末年始の休業は判定しない（土日のみ）。
 
+import type { ConditionFields } from "./conditions";
+
 export const PAYOUT = 1000;
 export const EXPIRY_HOURS_JST = [11, 13, 15, 17, 19, 21, 23, 1, 3, 5] as const;
 export const ROUND_LENGTH_MIN = 180;
@@ -206,7 +208,7 @@ export type TradeRecord = {
   /** 自動取得できなかった（休場など） */
   autoUnavailable?: boolean;
   note: string;
-};
+} & ConditionFields;
 
 export type Outcome = "win" | "lose" | "draw" | "pending";
 
