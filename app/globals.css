@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+/* 色の定義。上昇・下落は色だけでなく文字と矢印でも区別します */
+@theme {
+  --color-bg: #0b0f14;
+  --color-panel: #121821;
+  --color-panel-2: #18202b;
+  --color-line: #243041;
+  --color-ink: #e6edf5;
+  --color-muted: #8b98a9;
+  --color-up: #2fbf8f;
+  --color-down: #f0596b;
+  --color-hold: #e0a63a;
+  --color-accent: #6aa8ff;
+  --color-demo: #c9a2ff;
+
+  --font-sans: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic UI", Meiryo, system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Roboto Mono", Menlo, Consolas, monospace;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Recharts のフォーカス枠を目立たなくする */
+.recharts-wrapper *:focus {
+  outline: none;
+}

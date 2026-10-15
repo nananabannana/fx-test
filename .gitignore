@@ -1,0 +1,13 @@
+node_modules
+.next
+out
+*.tsbuildinfo
+next-env.d.ts
+
+# 秘密情報（APIキーなど）は絶対にコミットしない
+.env
+.env.local
+.env.*.local
+
+# 株スイングのローカル保存（Supabase 未接続時）
+.data
