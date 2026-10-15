@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLiveCandles } from "@/lib/useLiveCandles";
+import { nowMs, useIsClient } from "@/lib/useIsClient";
 import {
   breakeven, expectedValue, nextEvenHour, payoff, settle, stats, toCsv,
   type BinaryDirection, type BinaryKind, type BinaryRecord, type Pricing,
@@ -39,9 +40,8 @@ function loadRecords(): BinaryRecord[] {
 
 export default function BinaryPage() {
   // 時刻を使う画面なので、サーバーで作る最初の HTML とずれないよう、ブラウザで表示してから描く
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-  if (!mounted) return <p className="py-10 text-center text-sm text-muted">読み込み中…</p>;
+  const isClient = useIsClient();
+  if (!isClient) return <p className="py-10 text-center text-sm text-muted">読み込み中…</p>;
   return <BinaryView />;
 }
 
@@ -52,7 +52,7 @@ function BinaryView() {
 
   const [kind, setKind] = useState<BinaryKind>("ladder");
   const [direction, setDirection] = useState<BinaryDirection>("high");
-  const [judgeAt, setJudgeAt] = useState<number>(() => nextEvenHour(Date.now()));
+  const [judgeAt, setJudgeAt] = useState<number>(() => nextEvenHour(nowMs()));
   const [strikeText, setStrikeText] = useState("");
   const [mode, setMode] = useState<Pricing["mode"]>("price");
   const [price, setPrice] = useState(500);
@@ -66,39 +66,33 @@ function BinaryView() {
   const [aiBusy, setAiBusy] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
 
-  const [records, setRecords] = useState<BinaryRecord[]>([]);
-  const [loaded, setLoaded] = useState(false);
-  const [now, setNow] = useState(() => Date.now());
+  const [records, setRecords] = useState<BinaryRecord[]>(loadRecords);
+  const [now, setNow] = useState(nowMs);
   const settling = useRef(false);
 
   useEffect(() => {
-    setRecords(loadRecords());
-    setLoaded(true);
     const id = window.setInterval(() => setNow(Date.now()), 15_000);
     return () => window.clearInterval(id);
   }, []);
 
   useEffect(() => {
-    if (!loaded) return;
     try {
       localStorage.setItem(STORE_KEY, JSON.stringify(records));
     } catch {
       /* 保存できなくても動作は続ける */
     }
-  }, [records, loaded]);
+  }, [records]);
 
-  // 目標レートの初期値は現在値
-  useEffect(() => {
-    if (rate !== null && strikeText === "") setStrikeText(rate.toFixed(3));
-  }, [rate, strikeText]);
+  // 目標レートは、入力されるまでは現在値を表示する
+  const strikeValue = strikeText === "" && rate !== null ? rate.toFixed(3) : strikeText;
 
   const pricing: Pricing = mode === "price" ? { mode, price } : { mode, multiplier, stake };
   const be = breakeven(pricing);
   const po = payoff(pricing, mode === "price" ? units : 1);
-  const strike = kind === "ladder" ? Number(strikeText) : rate;
+  const strike = kind === "ladder" ? Number(strikeValue) : rate;
   const minutesLeft = Math.round((judgeAt - now) / MINUTE);
   const validStrike = strike !== null && Number.isFinite(strike) && strike > 0;
-  const canRecord = rate !== null && validStrike && be !== null && judgeAt - Date.now() >= MINUTE && !live.stale;
+  const canRecord = rate !== null && validStrike && be !== null && judgeAt - now >= MINUTE && !live.stale;
 
   // 判定時刻を過ぎた記録を自動で判定する
   const settleDue = useCallback(async () => {
@@ -163,8 +157,8 @@ function BinaryView() {
   const record = () => {
     if (!canRecord || rate === null || strike === null) return;
     const r: BinaryRecord = {
-      id: `bin-${Date.now().toString(36)}`,
-      createdAt: Date.now(),
+      id: `bin-${nowMs().toString(36)}`,
+      createdAt: nowMs(),
       kind,
       direction,
       strike: Math.round(strike * 1000) / 1000,
@@ -207,7 +201,7 @@ function BinaryView() {
         <p className="text-xs text-muted">判定時刻と購入価格から損益分岐を計算し、実弾なしで記録して判定時刻のレートで自動判定します（実際の購入はしません）</p>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
         <Card title="条件">
           <div className="mb-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <span className="text-xs text-muted">{PAIR} 現在値</span>
@@ -242,9 +236,9 @@ function BinaryView() {
               {kind === "ladder" ? (
                 <Field
                   label="目標レート"
-                  hint={validStrike && rate !== null ? `現在値から ${((Number(strikeText) - rate) / PIP).toFixed(1)} pips` : "例：150.250"}
+                  hint={validStrike && rate !== null ? `現在値から ${((Number(strikeValue) - rate) / PIP).toFixed(1)} pips` : "例：150.250"}
                 >
-                  <input inputMode="decimal" value={strikeText} onChange={(e) => setStrikeText(e.target.value)} className={`${inputClass} num`} />
+                  <input inputMode="decimal" value={strikeValue} onChange={(e) => setStrikeText(e.target.value)} className={`${inputClass} num`} />
                 </Field>
               ) : (
                 <Field label="目標レート" hint="記録した時点の現在値になります">

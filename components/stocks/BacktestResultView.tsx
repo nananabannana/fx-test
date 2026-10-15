@@ -73,7 +73,7 @@ export function BacktestResultView({ result }: { result: BacktestResult }) {
         </Card>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card title="スコア帯ごとの成績">
           <BucketTable rows={result.byScore} />
           <p className="mt-2 text-[11px] leading-relaxed text-muted">

@@ -57,6 +57,7 @@ export function useLiveCandles(enabled: boolean) {
 
   useEffect(() => {
     if (!enabled) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 外部API の購読（取得開始）
     refresh();
     const id = window.setInterval(() => {
       setNow(Date.now());
