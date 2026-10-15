@@ -37,6 +37,7 @@ export function ConditionAnalysis({
   backfill,
   onPatch,
   note,
+  defaultMultiplier = "1.9",
 }: {
   /** フィルター後の記録 */
   items: CondItem[];
@@ -47,9 +48,11 @@ export function ConditionAnalysis({
   backfill: BackfillTarget[] | null;
   onPatch: (id: string, patch: ConditionFields) => void;
   note?: ReactNode;
+  /** 払戻倍率の初期値（外為オプションは 1.9、コストなしの売買は 2 → 損益分岐 50%） */
+  defaultMultiplier?: string;
 }) {
   const [dim, setDim] = useState<Dim>("session");
-  const [multText, setMultText] = useState("1.9");
+  const [multText, setMultText] = useState(defaultMultiplier);
   const [minImp, setMinImp] = useState<Importance>("medium");
   const filler = useAtrBackfill(onPatch);
 
